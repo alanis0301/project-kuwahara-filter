@@ -1,0 +1,57 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include "include/kuwahara.h"
+#include "include/pgm_io.h"
+
+int main(void)
+{
+    // Define endereco de imagem de entrada
+    const char *inpath = "imgs_original/mona_lisa.ascii.pgm";
+    // const char *inpath = "imgs_original/pepper.ascii.pgm";
+
+
+    // Define o tamanho da janela (ímpar)
+    int window = 3;
+
+    // Define variável auxiliar
+    int image[IMG_SIZE][IMG_SIZE];
+    int width = IMG_SIZE, height = IMG_SIZE;
+
+    // Lê imagem
+    read_pgm(inpath, image, &width, &height);
+
+    // Aplica filtro kuwahara
+    clock_t t0 = clock(); // Mede o tempo de CPU. Desconsidera o tempo de I/O
+    kuwahara_filter(image, window);
+    clock_t t1 = clock();
+
+    double secs = (double)(t1 - t0) / (double)CLOCKS_PER_SEC;
+    printf("Tempo (CPU) do kuwahara_filter: %.6f s\n", secs);
+
+    // Constroi caminho de saída
+    char outpath[1024];
+    if (strncmp(inpath, "imgs_original/", 14) == 0)
+    {
+        snprintf(outpath, sizeof(outpath), "imgs_filtered/%s", inpath + 14);
+    }
+    else
+    {
+        const char *name = strrchr(inpath, '/');
+        if (!name)
+            name = strrchr(inpath, '\\');
+        if (name)
+            name++;
+        else
+            name = inpath;
+        snprintf(outpath, sizeof(outpath), "imgs_filtered/%s", name);
+    }
+
+    // Escreve imagem após aplicação do filtro
+    write_pgm(outpath, image, width, height);
+
+    // Printa no terminal o path de origem, o de destino e o tamanho da janela
+    printf("Processado %s -> %s (window=%d)\n", inpath, outpath, window);
+    return 0;
+}
