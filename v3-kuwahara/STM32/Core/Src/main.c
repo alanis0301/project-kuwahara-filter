@@ -399,6 +399,257 @@ void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_lin
 		printf("\n");
 	}
 }
+//// Versão Melhoria 1
+//void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
+//{
+//	const int width = IMG_SIZE;
+//	const int height = IMG_SIZE;
+//	const int window_size = KUWAHARA_WINDOW;
+//	const int quadrant_size = (window_size + 1) / 2;
+//
+//	for (int pixel_y = start_line; pixel_y <= end_line; ++pixel_y)
+//	{
+//		// Mapeia coordenada global para buffer
+//		int buffer_y = pixel_y - start_line + buffer_start_line;
+//
+//		for (int pixel_x = 0; pixel_x < width; ++pixel_x)
+//		{
+//			int window_top_y = pixel_y - (window_size / 2);
+//			int window_left_x = pixel_x - (window_size / 2);
+//
+//			double best_variance = 1e300;
+//			double best_mean = image_buffer[buffer_y][pixel_x];
+//
+//			int quadrant_order[4][2] = {{1, 1}, {0, 1}, {1, 0}, {0, 0}};
+//
+//			for (int q = 0; q < 4; ++q)
+//			{
+//				int quadrant_y = quadrant_order[q][0];
+//				int quadrant_x = quadrant_order[q][1];
+//
+//				long long sum = 0, sum_sq = 0;
+//				int pixel_count = 0;
+//				int valid_quadrant = 1; // Flag para verificar se todos pixels estão no buffer
+//
+//				for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+//				{
+//					for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+//					{
+//						int read_y = window_top_y + (quadrant_y ? (quadrant_size - 1) : 0) + offset_y;
+//						int read_x = window_left_x + (quadrant_x ? (quadrant_size - 1) : 0) + offset_x;
+//
+//						// BORDER_REFLECT_101
+//						if (read_y < 0)
+//							read_y = -read_y;
+//						if (read_y >= height)
+//							read_y = 2 * height - read_y - 2;
+//						if (read_x < 0)
+//							read_x = -read_x;
+//						if (read_x >= width)
+//							read_x = 2 * width - read_x - 2;
+//
+//						// Clamping
+//						if (read_y < 0)
+//							read_y = 0;
+//						if (read_y >= height)
+//							read_y = height - 1;
+//						if (read_x < 0)
+//							read_x = 0;
+//						if (read_x >= width)
+//							read_x = width - 1;
+//
+//						// Converter coordenada global -> buffer
+//						int buf_y = read_y - start_line + buffer_start_line;
+//
+//						// Verifica se está no buffer
+//						if (buf_y >= 0 && buf_y < BUFFER_SIZE)
+//						{
+//							int pixel_value = image_buffer[buf_y][read_x];
+//							sum += pixel_value;
+//							sum_sq += (long long)pixel_value * (long long)pixel_value;
+//							pixel_count++;
+//						}
+//						else
+//						{
+//							// Pixel necessário não está no buffer - quadrante inválido
+//							valid_quadrant = 0;
+//							break;
+//						}
+//					}
+//					if (!valid_quadrant)
+//						break;
+//				}
+//
+//				// Só considera quadrante se todos os pixels estavam disponíveis
+//				if (valid_quadrant && pixel_count > 1)
+//				{
+//					double mean = (double)sum / (double)pixel_count;
+//					double variance = ((double)sum_sq - (double)sum * sum / pixel_count) / pixel_count;
+//
+//                     if (variance < best_variance) {
+//                         best_variance = variance;
+//                         best_mean = mean;
+//                     }
+//				}
+//			}
+//
+//			int filtered_value = (int)(best_mean);
+//			if (pixel_x < width - 1)
+//				printf("%d ", filtered_value);
+//			else
+//				printf("%d", filtered_value);
+//		}
+//		printf("\n");
+//	}
+//}
+
+//// Versão Melhoria 2
+//void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
+//{
+//	const int width = IMG_SIZE;
+//	const int height = IMG_SIZE;
+//	const int window_size = KUWAHARA_WINDOW;
+//	const int quadrant_size = (window_size + 1) / 2;
+//	const int radius = window_size / 2;
+//	const int shift = quadrant_size - 1;
+//	static const int quadrant_order[4][2] = {{1, 1}, {0, 1}, {1, 0}, {0, 0}};
+//
+//	// Miolo do frame completo (onde NÃO existe reflexão/clamp)
+//	const int inner_x0 = radius;
+//	const int inner_x1 = width - radius - 1;
+//	const int inner_y0 = radius;
+//	const int inner_y1 = height - radius - 1;
+//
+//	for (int pixel_y = start_line; pixel_y <= end_line; ++pixel_y)
+//	{
+//		// Mapeia coordenada global para buffer
+//		int buffer_y = pixel_y - start_line + buffer_start_line;
+//
+//		for (int pixel_x = 0; pixel_x < width; ++pixel_x)
+//		{
+//			int window_top_y = pixel_y - radius;
+//			int window_left_x = pixel_x - radius;
+//
+//			double best_variance = 1e300;
+//			double best_mean = image_buffer[buffer_y][pixel_x];
+//
+//			const int is_inner = (pixel_x >= inner_x0 && pixel_x <= inner_x1 &&
+//							 pixel_y >= inner_y0 && pixel_y <= inner_y1);
+//
+//			for (int q = 0; q < 4; ++q)
+//			{
+//				int quadrant_y = quadrant_order[q][0];
+//				int quadrant_x = quadrant_order[q][1];
+//
+//				long long sum = 0, sum_sq = 0;
+//				int pixel_count = 0;
+//				int valid_quadrant = 1; // Flag para verificar se todos pixels estão no buffer
+//
+//				if (is_inner)
+//				{
+//					// FAST PATH: sem reflexão/clamp (índices sempre dentro do frame)
+//					const int base_y = window_top_y + (quadrant_y ? shift : 0);
+//					const int base_x = window_left_x + (quadrant_x ? shift : 0);
+//
+//					for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+//					{
+//						const int read_y = base_y + offset_y;
+//						const int buf_y = read_y - start_line + buffer_start_line;
+//						if (buf_y < 0 || buf_y >= BUFFER_SIZE)
+//						{
+//							valid_quadrant = 0;
+//							break;
+//						}
+//
+//						for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+//						{
+//							const int read_x = base_x + offset_x;
+//							const int pixel_value = image_buffer[buf_y][read_x];
+//							sum += pixel_value;
+//							sum_sq += (long long)pixel_value * (long long)pixel_value;
+//							pixel_count++;
+//						}
+//					}
+//				}
+//				else
+//				{
+//					// SLOW PATH: mantém exatamente BORDER_REFLECT_101 + clamp
+//					for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+//					{
+//						for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+//						{
+//							int read_y = window_top_y + (quadrant_y ? shift : 0) + offset_y;
+//							int read_x = window_left_x + (quadrant_x ? shift : 0) + offset_x;
+//
+//							// BORDER_REFLECT_101
+//							if (read_y < 0)
+//								read_y = -read_y;
+//							if (read_y >= height)
+//								read_y = 2 * height - read_y - 2;
+//							if (read_x < 0)
+//								read_x = -read_x;
+//							if (read_x >= width)
+//								read_x = 2 * width - read_x - 2;
+//
+//							// Clamping
+//							if (read_y < 0)
+//								read_y = 0;
+//							if (read_y >= height)
+//								read_y = height - 1;
+//							if (read_x < 0)
+//								read_x = 0;
+//							if (read_x >= width)
+//								read_x = width - 1;
+//
+//							// Converter coordenada global -> buffer
+//							int buf_y = read_y - start_line + buffer_start_line;
+//
+//							// Verifica se está no buffer
+//							if (buf_y >= 0 && buf_y < BUFFER_SIZE)
+//							{
+//								int pixel_value = image_buffer[buf_y][read_x];
+//								sum += pixel_value;
+//								sum_sq += (long long)pixel_value * (long long)pixel_value;
+//								pixel_count++;
+//							}
+//							else
+//							{
+//								// Pixel necessário não está no buffer - quadrante inválido
+//								valid_quadrant = 0;
+//								break;
+//							}
+//						}
+//						if (!valid_quadrant)
+//							break;
+//					}
+//				}
+//
+//				if (!valid_quadrant)
+//					continue;
+//
+//				// Só considera quadrante se todos os pixels estavam disponíveis
+//				if (pixel_count > 1)
+//				{
+//					double mean = (double)sum / (double)pixel_count;
+//					double variance = ((double)sum_sq - (double)sum * sum / pixel_count) / pixel_count;
+//
+//                    if (variance < best_variance) {
+//                        best_variance = variance;
+//                        best_mean = mean;
+//                    }
+//				}
+//			}
+//
+//			int filtered_value = (int)(best_mean);
+//			if (pixel_x < width - 1)
+//				printf("%d ", filtered_value);
+//			else
+//				printf("%d", filtered_value);
+//		}
+//		printf("\n");
+//	}
+//}
+
 #endif
 
 /* USER CODE END 0 */
