@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <windows.h>
 #include "include/kuwahara.h"
 #include "include/pgm_io.h"
 
@@ -23,11 +24,13 @@ int main(void)
     read_pgm(inpath, image, &width, &height);
 
     // Aplica filtro kuwahara
-    clock_t t0 = clock(); // Mede o tempo de CPU. Desconsidera o tempo de I/O
+    LARGE_INTEGER frequency, start, end;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
     kuwahara_filter(image, window);
-    clock_t t1 = clock();
+    QueryPerformanceCounter(&end);
 
-    double secs = (double)(t1 - t0) / (double)CLOCKS_PER_SEC;
+    double secs = (double)(end.QuadPart - start.QuadPart) / frequency.QuadPart;
     printf("Tempo (CPU) do kuwahara_filter: %.6f s\n", secs);
 
     // Constroi caminho de saída

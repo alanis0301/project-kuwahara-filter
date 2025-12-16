@@ -19,7 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include <stdio.h>
-#include <math.h> 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -65,6 +65,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim16;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -78,6 +80,7 @@ static pixel_t image_buffer[BUFFER_SIZE][IMG_SIZE];
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -295,110 +298,111 @@ int receive_line_uart(pixel_t *line_buffer)
  * @param buffer_start_line Linha inicial no BUFFER (0-45).
  */
 // Aplica o filtro Kuwahara usando o buffer parcial (streaming) e envia linhas filtradas
-void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
-{
-	const int width = IMG_SIZE;
-	const int height = IMG_SIZE;
-	const int window_size = KUWAHARA_WINDOW;
-	const int quadrant_size = (window_size + 1) / 2;
+//void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
+//{
+//	const int width = IMG_SIZE;
+//	const int height = IMG_SIZE;
+//	const int window_size = KUWAHARA_WINDOW;
+//	const int quadrant_size = (window_size + 1) / 2;
+//
+//	for (int pixel_y = start_line; pixel_y <= end_line; ++pixel_y)
+//	{
+//		// Mapeia coordenada global para buffer
+//		int buffer_y = pixel_y - start_line + buffer_start_line;
+//
+//		for (int pixel_x = 0; pixel_x < width; ++pixel_x)
+//		{
+//			int window_top_y = pixel_y - (window_size / 2);
+//			int window_left_x = pixel_x - (window_size / 2);
+//
+//			double best_std_dev = 1e300;
+//			double best_mean = image_buffer[buffer_y][pixel_x];
+//
+//			int quadrant_order[4][2] = {{1, 1}, {0, 1}, {1, 0}, {0, 0}};
+//
+//			for (int q = 0; q < 4; ++q)
+//			{
+//				int quadrant_y = quadrant_order[q][0];
+//				int quadrant_x = quadrant_order[q][1];
+//
+//				long long sum = 0, sum_sq = 0;
+//				int pixel_count = 0;
+//				int valid_quadrant = 1; // Flag para verificar se todos pixels estão no buffer
+//
+//				for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+//				{
+//					for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+//					{
+//						int read_y = window_top_y + (quadrant_y ? (quadrant_size - 1) : 0) + offset_y;
+//						int read_x = window_left_x + (quadrant_x ? (quadrant_size - 1) : 0) + offset_x;
+//
+//						// BORDER_REFLECT_101
+//						if (read_y < 0)
+//							read_y = -read_y;
+//						if (read_y >= height)
+//							read_y = 2 * height - read_y - 2;
+//						if (read_x < 0)
+//							read_x = -read_x;
+//						if (read_x >= width)
+//							read_x = 2 * width - read_x - 2;
+//
+//						// Clamping
+//						if (read_y < 0)
+//							read_y = 0;
+//						if (read_y >= height)
+//							read_y = height - 1;
+//						if (read_x < 0)
+//							read_x = 0;
+//						if (read_x >= width)
+//							read_x = width - 1;
+//
+//						// Converter coordenada global -> buffer
+//						int buf_y = read_y - start_line + buffer_start_line;
+//
+//						// Verifica se está no buffer
+//						if (buf_y >= 0 && buf_y < BUFFER_SIZE)
+//						{
+//							int pixel_value = image_buffer[buf_y][read_x];
+//							sum += pixel_value;
+//							sum_sq += (long long)pixel_value * (long long)pixel_value;
+//							pixel_count++;
+//						}
+//						else
+//						{
+//							// Pixel necessário não está no buffer - quadrante inválido
+//							valid_quadrant = 0;
+//							break;
+//						}
+//					}
+//					if (!valid_quadrant)
+//						break;
+//				}
+//
+//				// Só considera quadrante se todos os pixels estavam disponíveis
+//				if (valid_quadrant && pixel_count > 1)
+//				{
+//					double mean = (double)sum / (double)pixel_count;
+//					double variance = ((double)sum_sq - (double)sum * sum / pixel_count) / pixel_count;
+//					double std_dev = sqrt(variance);
+//
+//					if (std_dev < best_std_dev)
+//					{
+//						best_std_dev = std_dev;
+//						best_mean = mean;
+//					}
+//				}
+//			}
+//
+//			int filtered_value = (int)(best_mean);
+//			if (pixel_x < width - 1)
+//				printf("%d ", filtered_value);
+//			else
+//				printf("%d", filtered_value);
+//		}
+//		printf("\n");
+//	}
+//}
 
-	for (int pixel_y = start_line; pixel_y <= end_line; ++pixel_y)
-	{
-		// Mapeia coordenada global para buffer
-		int buffer_y = pixel_y - start_line + buffer_start_line;
-
-		for (int pixel_x = 0; pixel_x < width; ++pixel_x)
-		{
-			int window_top_y = pixel_y - (window_size / 2);
-			int window_left_x = pixel_x - (window_size / 2);
-
-			double best_std_dev = 1e300;
-			double best_mean = image_buffer[buffer_y][pixel_x];
-
-			int quadrant_order[4][2] = {{1, 1}, {0, 1}, {1, 0}, {0, 0}};
-
-			for (int q = 0; q < 4; ++q)
-			{
-				int quadrant_y = quadrant_order[q][0];
-				int quadrant_x = quadrant_order[q][1];
-
-				long long sum = 0, sum_sq = 0;
-				int pixel_count = 0;
-				int valid_quadrant = 1; // Flag para verificar se todos pixels estão no buffer
-
-				for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
-				{
-					for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
-					{
-						int read_y = window_top_y + (quadrant_y ? (quadrant_size - 1) : 0) + offset_y;
-						int read_x = window_left_x + (quadrant_x ? (quadrant_size - 1) : 0) + offset_x;
-
-						// BORDER_REFLECT_101
-						if (read_y < 0)
-							read_y = -read_y;
-						if (read_y >= height)
-							read_y = 2 * height - read_y - 2;
-						if (read_x < 0)
-							read_x = -read_x;
-						if (read_x >= width)
-							read_x = 2 * width - read_x - 2;
-
-						// Clamping
-						if (read_y < 0)
-							read_y = 0;
-						if (read_y >= height)
-							read_y = height - 1;
-						if (read_x < 0)
-							read_x = 0;
-						if (read_x >= width)
-							read_x = width - 1;
-
-						// Converter coordenada global -> buffer
-						int buf_y = read_y - start_line + buffer_start_line;
-
-						// Verifica se está no buffer
-						if (buf_y >= 0 && buf_y < BUFFER_SIZE)
-						{
-							int pixel_value = image_buffer[buf_y][read_x];
-							sum += pixel_value;
-							sum_sq += (long long)pixel_value * (long long)pixel_value;
-							pixel_count++;
-						}
-						else
-						{
-							// Pixel necessário não está no buffer - quadrante inválido
-							valid_quadrant = 0;
-							break;
-						}
-					}
-					if (!valid_quadrant)
-						break;
-				}
-
-				// Só considera quadrante se todos os pixels estavam disponíveis
-				if (valid_quadrant && pixel_count > 1)
-				{
-					double mean = (double)sum / (double)pixel_count;
-					double variance = ((double)sum_sq - (double)sum * sum / pixel_count) / pixel_count;
-					double std_dev = sqrt(variance);
-
-					if (std_dev < best_std_dev)
-					{
-						best_std_dev = std_dev;
-						best_mean = mean;
-					}
-				}
-			}
-
-			int filtered_value = (int)(best_mean);
-			if (pixel_x < width - 1)
-				printf("%d ", filtered_value);
-			else
-				printf("%d", filtered_value);
-		}
-		printf("\n");
-	}
-}
 //// Versão Melhoria 1
 //void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
 //{
@@ -649,49 +653,200 @@ void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_lin
 //		printf("\n");
 //	}
 //}
+// Versão Melhoria 3
+void kuwahara_filter_buffered(int start_line, int end_line, int buffer_start_line)
+{
+	const int width = IMG_SIZE;
+	const int height = IMG_SIZE;
+	const int window_size = KUWAHARA_WINDOW;
+	const int quadrant_size = (window_size + 1) / 2;
+	const int radius = window_size / 2;
+	const int shift = quadrant_size - 1;
+	static const int quadrant_order[4][2] = {{1, 1}, {0, 1}, {1, 0}, {0, 0}};
+
+	// Miolo do frame completo (onde NÃO existe reflexão/clamp)
+	const int inner_x0 = radius;
+	const int inner_x1 = width - radius - 1;
+	const int inner_y0 = radius;
+	const int inner_y1 = height - radius - 1;
+
+	for (int pixel_y = start_line; pixel_y <= end_line; ++pixel_y)
+	{
+		// Mapeia coordenada global para buffer
+		int buffer_y = pixel_y - start_line + buffer_start_line;
+
+		for (int pixel_x = 0; pixel_x < width; ++pixel_x)
+		{
+			int window_top_y = pixel_y - radius;
+			int window_left_x = pixel_x - radius;
+
+			double best_std_dev = 1e300;
+			double best_mean = image_buffer[buffer_y][pixel_x];
+
+			const int is_inner = (pixel_x >= inner_x0 && pixel_x <= inner_x1 &&
+							 pixel_y >= inner_y0 && pixel_y <= inner_y1);
+
+			for (int q = 0; q < 4; ++q)
+			{
+				int quadrant_y = quadrant_order[q][0];
+				int quadrant_x = quadrant_order[q][1];
+
+				long long sum = 0, sum_sq = 0;
+				int pixel_count = 0;
+				int valid_quadrant = 1; // Flag para verificar se todos pixels estão no buffer
+
+				if (is_inner)
+				{
+					// FAST PATH: sem reflexão/clamp (índices sempre dentro do frame)
+					const int base_y = window_top_y + (quadrant_y ? shift : 0);
+					const int base_x = window_left_x + (quadrant_x ? shift : 0);
+
+					for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+					{
+						const int read_y = base_y + offset_y;
+						const int buf_y = read_y - start_line + buffer_start_line;
+						if (buf_y < 0 || buf_y >= BUFFER_SIZE)
+						{
+							valid_quadrant = 0;
+							break;
+						}
+
+						for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+						{
+							const int read_x = base_x + offset_x;
+							const int pixel_value = image_buffer[buf_y][read_x];
+							sum += pixel_value;
+							sum_sq += (long long)pixel_value * (long long)pixel_value;
+							pixel_count++;
+						}
+					}
+				}
+				else
+				{
+					// SLOW PATH: mantém exatamente BORDER_REFLECT_101 + clamp
+					for (int offset_y = 0; offset_y < quadrant_size; ++offset_y)
+					{
+						for (int offset_x = 0; offset_x < quadrant_size; ++offset_x)
+						{
+							int read_y = window_top_y + (quadrant_y ? shift : 0) + offset_y;
+							int read_x = window_left_x + (quadrant_x ? shift : 0) + offset_x;
+
+							// BORDER_REFLECT_101
+							if (read_y < 0)
+								read_y = -read_y;
+							if (read_y >= height)
+								read_y = 2 * height - read_y - 2;
+							if (read_x < 0)
+								read_x = -read_x;
+							if (read_x >= width)
+								read_x = 2 * width - read_x - 2;
+
+							// Clamping
+							if (read_y < 0)
+								read_y = 0;
+							if (read_y >= height)
+								read_y = height - 1;
+							if (read_x < 0)
+								read_x = 0;
+							if (read_x >= width)
+								read_x = width - 1;
+
+							// Converter coordenada global -> buffer
+							int buf_y = read_y - start_line + buffer_start_line;
+
+							// Verifica se está no buffer
+							if (buf_y >= 0 && buf_y < BUFFER_SIZE)
+							{
+								int pixel_value = image_buffer[buf_y][read_x];
+								sum += pixel_value;
+								sum_sq += (long long)pixel_value * (long long)pixel_value;
+								pixel_count++;
+							}
+							else
+							{
+								// Pixel necessário não está no buffer - quadrante inválido
+								valid_quadrant = 0;
+								break;
+							}
+						}
+						if (!valid_quadrant)
+							break;
+					}
+				}
+
+				if (!valid_quadrant)
+					continue;
+
+				// Só considera quadrante se todos os pixels estavam disponíveis
+				if (pixel_count > 1)
+				{
+					double mean = (double)sum / (double)pixel_count;
+					double variance = ((double)sum_sq - (double)sum * sum / pixel_count) / pixel_count;
+					double std_dev = sqrt(variance);
+
+					if (std_dev < best_std_dev)
+					{
+						best_std_dev = std_dev;
+						best_mean = mean;
+					}
+				}
+			}
+
+			int filtered_value = (int)(best_mean);
+			if (pixel_x < width - 1)
+				printf("%d ", filtered_value);
+			else
+				printf("%d", filtered_value);
+		}
+		printf("\n");
+	}
+}
 
 #endif
 
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
+  * @brief  The application entry point.
+  * @retval int
+  */
 int main(void)
 {
 
-	/* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
+	uint32_t timer1, timer2;
+  /* USER CODE END 1 */
 
-	/* USER CODE END 1 */
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE END Init */
 
-	/* USER CODE END Init */
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE END SysInit */
 
-	/* USER CODE END SysInit */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+  MX_TIM16_Init();
+  /* USER CODE BEGIN 2 */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_USART2_UART_Init();
+  HAL_TIM_Base_Start(&htim16);
+  /* USER CODE END 2 */
 
-	/* USER CODE BEGIN 2 */
-	/* USER CODE END 2 */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
-	while (1)
-	{
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
 #ifdef STREAMING_MODE
 		// ===== MODO STREAMING: Duas fases com buffer 46x90 =====
 
@@ -716,7 +871,11 @@ int main(void)
 		// FASE 1: Processa e envia linhas 0-44 (45 linhas)
 		// Buffer tem linhas 0-45, então linha 44 tem contexto completo (linha 45 disponível)
 		HAL_Delay(150);
+
+		__HAL_TIM_SET_COUNTER(&htim16, 0);
+		timer1 = __HAL_TIM_GET_COUNTER(&htim16);
 		kuwahara_filter_buffered(0, 44, 0);
+		timer1 = __HAL_TIM_GET_COUNTER(&htim16) - timer1;
 
 		// Sinaliza ao host que MCU terminou FASE 1 e está pronto para iniciar FASE 2
 		uart_send_str("#READY2#\n");
@@ -746,130 +905,175 @@ int main(void)
 		// FASE 2: Processa e envia linhas 45-89 (45 linhas)
 		if (ok_phase2)
 		{
+			__HAL_TIM_SET_COUNTER(&htim16, 0);
+			timer2 = __HAL_TIM_GET_COUNTER(&htim16);
 			kuwahara_filter_buffered(45, 89, 1);
+			timer2 = __HAL_TIM_GET_COUNTER(&htim16) - timer2;
 		}
 		else
 		{
 			printf("SKIP: Phase 2 processing skipped due to incomplete reception.\n");
 		}
 
+		for (int i = 0; i < 10; i++) {
+			HAL_Delay(2000);
+			printf("Tempo total: %u us\r\n", timer1);
+			printf("Tempo total: %u us\r\n", timer2);
+			printf("Tempo total: %u us\r\n", (timer1 + timer2));
+			printf("\r\n");
+		}
 #else
 		// ===== MODO FLASH: Processamento tradicional =====
 		kuwahara_filter(IMAGE_DATA_FLASH, KUWAHARA_WINDOW);
 
 		HAL_Delay(5000); // Delay apenas no modo FLASH
 #endif
-	};
-	/* USER CODE END 3 */
+    /* USER CODE BEGIN 3 */
+  };
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
-	RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-	/** Initializes the RCC Oscillators according to the specified parameters
-	 * in the RCC_OscInitTypeDef structure.
-	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-	RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
-	RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
+  RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/** Initializes the CPU, AHB and APB buses clocks
-	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
- * @brief USART2 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief TIM16 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM16_Init(void)
+{
+
+  /* USER CODE BEGIN TIM16_Init 0 */
+
+  /* USER CODE END TIM16_Init 0 */
+
+  /* USER CODE BEGIN TIM16_Init 1 */
+
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 47;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 65535;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
+
+  /* USER CODE END TIM16_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_USART2_UART_Init(void)
 {
 
-	/* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-	/* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART2_Init 0 */
 
-	/* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART2_Init 1 */
 
-	/* USER CODE END USART2_Init 1 */
-	huart2.Instance = USART2;
-	huart2.Init.BaudRate = 115200;
-	huart2.Init.WordLength = UART_WORDLENGTH_8B;
-	huart2.Init.StopBits = UART_STOPBITS_1;
-	huart2.Init.Parity = UART_PARITY_NONE;
-	huart2.Init.Mode = UART_MODE_TX_RX;
-	huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-	huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-	huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-	huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-	if (HAL_UART_Init(&huart2) != HAL_OK)
-	{
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
 
-	/* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART2_Init 2 */
+
 }
 
 /**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_GPIO_Init(void)
 {
-	GPIO_InitTypeDef GPIO_InitStruct = {0};
-	/* USER CODE BEGIN MX_GPIO_Init_1 */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
 
-	/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
-	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	__HAL_RCC_GPIOF_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-	/*Configure GPIO pin : B1_Pin */
-	GPIO_InitStruct.Pin = B1_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-	/*Configure GPIO pin : LD2_Pin */
-	GPIO_InitStruct.Pin = LD2_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : LD2_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-	/* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
 
-	/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -892,32 +1096,32 @@ int __io_putchar(int ch)
 /* USER CODE END 4 */
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
 void Error_Handler(void)
 {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1)
 	{
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
 /**
- * @brief  Reports the name of the source file and the source line number
- *         where the assert_param error has occurred.
- * @param  file: pointer to the source file name
- * @param  line: assert_param error line source number
- * @retval None
- */
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-	/* USER CODE BEGIN 6 */
+  /* USER CODE BEGIN 6 */
 	/* User can add his own implementation to report the file name and line number,
 		ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-	/* USER CODE END 6 */
+  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
